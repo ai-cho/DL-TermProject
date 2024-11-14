@@ -9,3 +9,29 @@ data from [modelnet40](https://www.kaggle.com/datasets/balraj98/modelnet40-princ
 * DataLoader (Done)
 * Model change (ing)
 * Set Pipeline each experiment (plan)
+
+
+```
+├── data_utils
+│   ├──ModelNetDataLoader.py
+├── data
+|   | modelnet40_normal_resampled
+|      ├── airplane
+|          ├── test
+|              ├── airplane_0627.off
+|              ├── airplane_0628.off
+|              ├── ...
+|          ├── train
+|              ├── airplane_0001.off
+|              ├── airplane_0002.off
+|              ├── ...
+|      ├── bathtub
+|      ├── ...
+├── models
+|   ├── pointnet2_cls_msg.py
+|   ├── pointnet2_cls_ssg.py
+|   ├── pointnet2_utils.py
+|   ├── ...
+├── test_classification.py
+├── train_classification.py
+```

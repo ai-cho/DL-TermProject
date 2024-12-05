@@ -53,7 +53,10 @@ class get_model(nn.Module):
         qk_dot = torch.sum(query*key, dim=2) # [24, 512, 1024] -> [24, 512]
         attention_score = torch.softmax(qk_dot/(1024**0.5), dim=1).unsqueeze(2) # [24, 512, 1]
         attention_output = torch.sum(attention_score * value, dim=1) # [24, 1024]
-        
+
+        # global feat이 너무 local feat으로만 표현되는 것을 방지하고자 glbol feat 더해줌. 
+        attention_scale = nn.Parameter(torch.ones(1))
+        attention_output = attention_output + attention_scale*global_feat # [24, 1024]
 
         # classification layer
         x = attention_output.view(B, 1024)

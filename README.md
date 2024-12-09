@@ -7,8 +7,8 @@ data from [modelnet40](https://www.kaggle.com/datasets/balraj98/modelnet40-princ
 
 ## What we need to do
 * DataLoader (Done)
-* Model change (ing)
-* Set Pipeline each experiment (plan)
+* Model change (Done)
+* Set Pipeline each experiment (Done)
 
 
 ```

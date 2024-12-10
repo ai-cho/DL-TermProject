@@ -1,8 +1,3 @@
-"""
-Author: Benny
-Date: Nov 2019
-"""
-
 import os
 import sys
 import torch
@@ -19,6 +14,10 @@ from pathlib import Path
 from tqdm import tqdm
 from data_utils.ModelNetDataLoader import ModelNetDataLoader
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0번 GPU 사용
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'models'))
@@ -28,18 +27,20 @@ def parse_args():
     parser = argparse.ArgumentParser('training')
     parser.add_argument('--use_cpu', action='store_true', default=False, help='use cpu mode')
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
-    parser.add_argument('--batch_size', type=int, default=24, help='batch size in training')
-    parser.add_argument('--model', default='pointnet_cls', help='model name [default: pointnet_cls]')
+    parser.add_argument('--batch_size', type=int, default=32, help='batch size in training')
+    parser.add_argument('--model', default='pointnet2_cls_ssg', help='model name [default: pointnet_cls]')
     parser.add_argument('--num_category', default=40, type=int, choices=[10, 40],  help='training on ModelNet10/40')
-    parser.add_argument('--epoch', default=200, type=int, help='number of epoch in training')
+    parser.add_argument('--epoch', default=20, type=int, help='number of epoch in training')
     parser.add_argument('--learning_rate', default=0.001, type=float, help='learning rate in training')
-    parser.add_argument('--num_point', type=int, default=1024, help='Point Number')
+    parser.add_argument('--num_point', type=int, default=512, help='Point Number')
     parser.add_argument('--optimizer', type=str, default='Adam', help='optimizer for training')
     parser.add_argument('--log_dir', type=str, default=None, help='experiment root')
     parser.add_argument('--decay_rate', type=float, default=1e-4, help='decay rate')
     parser.add_argument('--use_normals', action='store_true', default=False, help='use normals')
     parser.add_argument('--process_data', action='store_true', default=False, help='save data offline')
-    parser.add_argument('--use_uniform_sample', action='store_true', default=False, help='use uniform sampiling')
+    parser.add_argument('--use_uniform_sample', action='store_true', default=False, help='use uniform sampling')
+    # parser.add_argument('--reduce_data', type=float, default=0.1, help='percentage of dataset to use (default: 10%)')
+    parser.add_argument('--sampling_method', type=str, default='density_based', help='sampling method: fps, density_based') #여기 추가함
     return parser.parse_args()
 
 
@@ -57,7 +58,7 @@ def test(model, loader, num_class=40):
     for j, (points, target) in tqdm(enumerate(loader), total=len(loader)):
 
         if not args.use_cpu:
-            points, target = points.cuda(), target.cuda()
+            points, target = points.to(device), target.to(device)
 
         points = points.transpose(2, 1)
         pred, _ = classifier(points)
@@ -76,7 +77,6 @@ def test(model, loader, num_class=40):
     instance_acc = np.mean(mean_correct)
 
     return instance_acc, class_acc
-
 
 def main(args):
     def log_string(str):
@@ -117,16 +117,18 @@ def main(args):
 
     '''DATA LOADING'''
     log_string('Load dataset ...')
-    data_path = 'data/modelnet40_normal_resampled/'
+    data_path = '/content/drive/MyDrive/data/modelnet40_normal_resampled'
 
     train_dataset = ModelNetDataLoader(root=data_path, args=args, split='train', process_data=args.process_data)
     test_dataset = ModelNetDataLoader(root=data_path, args=args, split='test', process_data=args.process_data)
+
     trainDataLoader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=10, drop_last=True)
     testDataLoader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=10)
 
     '''MODEL LOADING'''
     num_class = args.num_category
     model = importlib.import_module(args.model)
+
     shutil.copy('./models/%s.py' % args.model, str(exp_dir))
     shutil.copy('models/pointnet2_utils.py', str(exp_dir))
     shutil.copy('./train_classification.py', str(exp_dir))
@@ -136,8 +138,8 @@ def main(args):
     classifier.apply(inplace_relu)
 
     if not args.use_cpu:
-        classifier = classifier.cuda()
-        criterion = criterion.cuda()
+        classifier = classifier.to(device)
+        criterion = criterion.to(device)
 
     try:
         checkpoint = torch.load(str(exp_dir) + '/checkpoints/best_model.pth')
@@ -165,7 +167,7 @@ def main(args):
     best_instance_acc = 0.0
     best_class_acc = 0.0
 
-    '''TRANING'''
+    '''TRAINING'''
     logger.info('Start training...')
     for epoch in range(start_epoch, args.epoch):
         log_string('Epoch %d (%d/%s):' % (global_epoch + 1, epoch + 1, args.epoch))
@@ -184,7 +186,7 @@ def main(args):
             points = points.transpose(2, 1)
 
             if not args.use_cpu:
-                points, target = points.cuda(), target.cuda()
+                points, target = points.to(device), target.to(device)
 
             pred, trans_feat = classifier(points)
             loss = criterion(pred, target.long(), trans_feat)

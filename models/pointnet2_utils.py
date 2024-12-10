@@ -83,6 +83,71 @@ def farthest_point_sample(xyz, npoint):
         farthest = torch.max(distance, -1)[1]
     return centroids
 
+def density_based_sample(points, npoint, size=0.5):
+    """
+    밀도 기반 Importance Sampling
+    Input:
+        points: input points position data, [B, N, C]
+        npoint: number of samples
+        size: 기준 그리드 크기
+    """
+    if len(points.shape) != 3:
+        raise ValueError(f"Expected input shape [B, N, C], but got {points.shape}")
+
+    B, N, C = points.shape
+    sampled_indices = []
+
+    for b in range(B):
+        # Extract current batch's points and convert to numpy
+        point = points[b].cpu().numpy()
+        xyz = point[:, :3]  # Use only XYZ coordinates
+
+        # Step 1: Compute grid indices
+        min_xyz = np.min(xyz, axis=0)
+        grid_idx = np.floor((xyz - min_xyz) / size).astype(int)
+
+      
+        blocks, block_idx = np.unique(grid_idx, axis=0, return_inverse=True)
+
+        block_point_map = {i: [] for i in range(len(blocks))}
+        for i, block_id in enumerate(block_idx):
+            block_point_map[block_id].append(i)
+
+        block_weights = np.array([len(indices) for indices in block_point_map.values()])
+        block_weights = np.exp(-block_weights)  # Weight decay based on density
+
+        weights = np.zeros(N)
+        for block_id, indices in block_point_map.items():
+            weights[indices] = block_weights[block_id]  # Assign block weight to each point in the block
+
+        total_weight = np.sum(weights)
+        if total_weight == 0:
+            weights = np.ones(N) / N
+        else:
+            weights /= total_weight
+
+        # Step 6: Sample points based on weights
+        sampled = np.random.choice(N, size=min(npoint, np.count_nonzero(weights)), replace=False, p=weights)
+        sampled_set = set(sampled)
+
+        while len(sampled_set) < npoint:
+            remaining_points = list(set(range(N)) - sampled_set)
+            if not remaining_points: 
+                break
+            additional_sample = np.random.choice(remaining_points, size=npoint - len(sampled_set), replace=False)
+            sampled_set.update(additional_sample)
+
+        
+        sampled = sorted(sampled_set)
+        sampled_indices.append(sampled)
+
+    # Convert to tensor
+    sampled_indices = torch.tensor(sampled_indices, dtype=torch.long, device=points.device)
+    return sampled_indices
+
+
+
+
 
 def query_ball_point(radius, nsample, xyz, new_xyz):
     """
@@ -121,7 +186,7 @@ def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False):
     """
     B, N, C = xyz.shape
     S = npoint
-    fps_idx = farthest_point_sample(xyz, npoint) # [B, npoint, C]
+    fps_idx = density_based_sample(xyz, npoint) # [B, npoint, C]
     new_xyz = index_points(xyz, fps_idx)
     idx = query_ball_point(radius, nsample, xyz, new_xyz)
     grouped_xyz = index_points(xyz, idx) # [B, npoint, nsample, C]
@@ -313,4 +378,3 @@ class PointNetFeaturePropagation(nn.Module):
             bn = self.mlp_bns[i]
             new_points = F.relu(bn(conv(new_points)))
         return new_points
-

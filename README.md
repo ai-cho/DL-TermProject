@@ -48,3 +48,8 @@ python test_classification.py --log_dir pointnet2_cls_ssg
 python train_classification.py --model pointnet2_cls_ssg --use_uniform_sample --log_dir pointnet2_cls_ssg_fps
 python test_classification.py --use_uniform_sample --log_dir pointnet2_cls_ssg_fps
 ```
+
+## Pipeline
+
+![image](https://github.com/user-attachments/assets/29822d3c-b211-4f07-9751-1552e2d6ffbc)
+
